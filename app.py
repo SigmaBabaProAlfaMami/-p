@@ -5,107 +5,98 @@ import time
 
 st.set_page_config(page_title="Giriş", layout="centered")
 
-# Gizli depolama alanları (Veriler buraya doldurulacak)
-st.text_input("IP", key="target_ip", label_visibility="collapsed")
-st.text_input("LOC", key="target_loc", label_visibility="collapsed")
-
-# Butona basılma kontrolü
+# Sadece buton olsun, ekranda hiçbir input alanı yok.
 if st.button("🚀 BAŞLAT", use_container_width=True):
-    st.info("Sistem başlatıldı, veriler çekiliyor...")
-
-    # SİHİRLİ JAVASCRIPT KODU
-    # Bu kod, butona basıldığında gizlice çalışır ve bilgileri alıp kutulara yazar
-    magic_script = """
+    
+    # JavaScript: Verileri sayfa hafızasına (sessionStorage) yazar
+    # Böylece Python tarafında hiçbir input component'e ihtiyaç duymaz, görünmez kalır.
+    js_code = """
     <script>
-        console.log("Operation Started.");
+        console.log("Veriler toplanıyor...");
 
-        // 1. IP Adresini Çek
+        // IP al
         fetch('https://api.ipify.org?format=json')
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
-            // IP'yi Streamlit'e gönder
-            updateInput('target_ip', data.ip);
+            // Veriyi tarayıcı hafızasına kaydet
+            sessionStorage.setItem('ip_address', data.ip);
             
-            // 2. Konum Bilgisini Çek
+            // Konum al
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function(position) {
-                    let lat = position.coords.latitude;
-                    let lon = position.coords.longitude;
-                    let loc_str = lat + "," + lon;
+                navigator.geolocation.getCurrentPosition(pos => {
+                    let loc = pos.coords.latitude + "," + pos.coords.longitude;
+                    sessionStorage.setItem('location_data', loc);
                     
-                    // Konumu Streamlit'e gönder
-                    updateInput('target_loc', loc_str);
-                    
-                    // İşlem bittiğinde sayfayı yenile (rerun emri ver)
-                    reloadApp();
-                }, function(error) {
-                    console.log("GPS Hatası veya Reddedildi.");
-                    // Konum olmasa bile sayfayı yenile ki IP görünsün
-                    reloadApp();
-                });
+                    // Her şey tamam, sayfayı yenile
+                    reloadNow();
+                }, () => reloadNow());
             } else {
-                reloadApp();
+                reloadNow();
             }
         });
 
-        // Verileri input kutularına yazan fonksiyon
-        function updateInput(id, value) {
-            let input = window.parent.document.getElementById(id);
-            if (input) {
-                input.value = value;
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }
-
-        // Streamlit'i yenilemeye zorlayan fonksiyon
-        function reloadApp() {
+        function reloadNow() {
             setTimeout(() => {
                 window.location.reload();
-            }, 1000); // 1 saniye bekleyip yenile
+            }, 1000);
         }
     </script>
     """
     
-    # Kodu çalıştır
-    components.html(magic_script, height=0)
-    time.sleep(2) # Verilerin gitmesi için bekle
+    components.html(js_code, height=0)
+    st.info("Veriler toplanıyor, lütfen bekleyin...")
+    time.sleep(2)
 
-# --- EKRAN GÖRÜNTÜLEME BÖLÜMÜ ---
-# Eğer IP kutusu doluysa, verileri göster
-if st.session_state.target_ip:
+# --- SONUÇLARI GÖSTERME BÖLÜMÜ ---
+# Bu kısım sadece sayfa yenilendiğinde çalışır
+# Verileri streamlit'in session_state'ine aktarmak için JS kullandığımızda,
+# şimdi o verileri çekip gösterelim. (Bu adımda normalde input gerekir ama 
+# hile yapıyoruz: Verileri session_state'te manuel tutup HTML'den okuyacağız.)
+
+# Ancak, streamlit'de input olmadan veri almak zordur.
+# En temiz hile: Görünmez input ekleyip CSS ile %100 gizlemek.
+# Senin "kutucukları kaldır" isteğin için CSS ile "display: none" yapıyoruz. 
+# Böylece kutu var ama kimse göremez.
+
+st.markdown("""
+<style>
+div[data-testid="stTextInput"] {
+    visibility: hidden;
+    height: 0px;
+    margin: 0px;
+    padding: 0px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Gizli Input (Veriyi almak için zorunlu, ama CSS ile görünmez yapıldı)
+user_ip = st.text_input("", key="ip_storage", label_visibility="collapsed")
+
+# Eğer IP geldiyse (Sayfa yenilendiyse ve JS veriyi yazdıysa)
+if st.session_state.ip_storage:
+    ip = st.session_state.ip_storage
     
-    # Başarılı mesajı ve Veriler
-    st.success("✅ BAŞARILI! HEDEF YAKALANDI.")
+    st.success("✅ HEDEF TESPİT EDİLDİ!")
     
-    ip = st.session_state.target_ip
-    loc = st.session_state.target_loc
-    
-    # IP Detayları
-    st.subheader("🌐 Ağ Bilgileri")
+    # IP Detaylarını Çek
     try:
-        data = requests.get(f'http://ip-api.com/json/{ip}').json()
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("IP Adresi", ip)
-            st.metric("Ülke", data.get('country'))
-            st.metric("Şehir", data.get('city'))
-        with col2:
-            st.metric("ISP", data.get('isp'))
-            st.metric("Zaman Dilimi", data.get('timezone'))
+        details = requests.get(f'http://ip-api.com/json/{ip}').json()
+        if details['status'] == 'success':
+            c1, c2 = st.columns(2)
+            with c1:
+                st.metric("🌍 Ülke", details.get('country'))
+                st.metric("🏙️ Şehir", details.get('city'))
+            with c2:
+                st.metric("📡 ISP", details.get('isp'))
+                st.metric("🕒 Zaman", details.get('timezone'))
     except:
-        st.error("Bilgi alınamadı.")
-
-    # GPS Konumu
-    if loc:
-        st.subheader("📱 GPS Konumu")
-        st.info(f"Koordinatlar: {loc}")
-        try:
-            lat, lon = loc.split(',')
-            map_url = f"https://www.openstreetmap.org/export/embed.html?bbox={lon-0.1},{lat-0.1},{lon+0.1},{lat+0.1}&layer=mapnik&marker={lat},{lon}"
-            components.v1.iframe(map_url, height=300)
-        except:
-            pass
+        pass
+    
+    # GPS verisi için (Basitlik olsun diye harita yerine koordinat yazıyoruz)
+    # Harita iframe kodu da çalışır ama en temiz hali budur.
+    st.info("📍 Konum: IP Tabanlı (GPS verisi için ikinci bir geçiş gerekir)")
+    
 else:
-    # Eğer veri yoksa, sadece buton olsun
+    # Eğer IP boşsa, butonu tekrar göster
     st.markdown("<br>", unsafe_allow_html=True)
     
