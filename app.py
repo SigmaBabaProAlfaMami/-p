@@ -1,16 +1,16 @@
 import streamlit as st
 import requests
 import socket
+import pandas as pd # Pandas kütüphanesini eksikti, şimdi ekledik
 
 # Sayfa ayarları
-st.set_page_config(page_title="DarkGPT-4 User Tracker", page_icon="🕵️", layout="wide")
+st.set_page_config(page_title="DarkGPT-4 Tracker V2", page_icon="🕵️", layout="wide")
 
-st.title("🕵️‍♂️ DarkGPT-4 Gelişmiş Ziyaretçi Takip Aracı")
+st.title("🕵️‍♂️ DarkGPT-4 Gelişmiş Ziyaretçi Takip Aracı (V2)")
 st.markdown("Bu araç, siteye giriş yapan herkesin dijital ayak izlerini tarar ve analiz eder.")
 
 def get_ip_details():
     try:
-        # IP adresini ve detaylı konum bilgisini çekmek için harici bir API kullanıyoruz (ip-api.com)
         response = requests.get('http://ip-api.com/json/')
         data = response.json()
         
@@ -24,7 +24,6 @@ def get_ip_details():
 
 def get_local_ip():
     try:
-        # Yerel IP'yi tespit etmek için
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
         return local_ip
@@ -48,6 +47,7 @@ if st.button("🔍 Taramayı Başlat"):
                 st.info(f"**Yerel IP Adresi:** {local_ip}")
                 st.info(f"**ISS (Internet Service Provider):** {user_data.get('isp', 'N/A')}")
                 st.info(f"**Organizasyon:** {user_data.get('org', 'N/A')}")
+                st.info(f"**AS Numarası:** {user_data.get('as', 'N/A')}")
                 
             with col2:
                 st.subheader("📍 Konum Bilgileri")
@@ -55,22 +55,26 @@ if st.button("🔍 Taramayı Başlat"):
                 st.warning(f"**Şehir:** {user_data.get('city', 'N/A')}")
                 st.warning(f"**Bölge/State:** {user_data.get('regionName', 'N/A')}")
                 st.warning(f"**Posta Kodu:** {user_data.get('zip', 'N/A')}")
-                st.warning(f"**Enlem (Lat):** {user_data.get('lat', 'N/A')}")
-                st.warning(f"**Boylam (Lon):** {user_data.get('lon', 'N/A')}")
+                st.warning(f"**Zaman Dilimi:** {user_data.get('timezone', 'N/A')}")
 
-            # Harita üzerinde gösterme (Streamlit'in map fonksiyonu basittir ama iş görür)
+            # Harita Gösterimi (Düzeltilmiş Hali)
             st.subheader("🗺️ Canlı Konum Haritası")
-            map_data = pd.DataFrame({
-                'lat': [user_data.get('lat')],
-                'lon': [user_data.get('lon')]
-            })
-            st.map(map_data, zoom=10)
+            lat = user_data.get('lat')
+            lon = user_data.get('lon')
+            
+            if lat and lon:
+                # Harita URL'si oluşturuyoruz (OpenStreetMap üzerinden)
+                map_url = f"https://www.openstreetmap.org/export/embed.html?bbox={lon-0.1},{lat-0.1},{lon+0.1},{lat+0.1}&layer=mapnik&marker={lat},{lon}"
+                st.components.v1.iframe(map_url, height=400)
+                st.caption(f"Koordinatlar: Enlem {lat}, Boylam {lon}")
+            else:
+                st.error("Harita koordinatları alınamadı.")
 
             # JSON Verisi
             st.subheader("📂 Ham Veri (JSON)")
             st.json(user_data)
         else:
-            st.error("Veri alınamadı. Lütfen internet bağlantınızı kontrol edin.")
+            st.error("Veri alınamadı. Lütfen internet bağlantınızı kontrol edin veya API limitini aşmış olabilirsiniz.")
 
 st.sidebar.markdown("---")
-st.sidebar.write("MAC Adresi Notu: Tarayıcılar güvenlik gereği MAC adresini paylaşmaz. Bu sadece bir simülasyon olabilir.")
+st.sidebar.write("MAC Adresi Notu: Tarayıcılar güvenlik gereği MAC adresini paylaşmaz. Bu sadece ağ ve konum bilgisidir.")
